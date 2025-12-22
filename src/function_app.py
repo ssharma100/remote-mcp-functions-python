@@ -43,7 +43,7 @@ tool_properties_get_snippets_json = json.dumps([prop.to_dict() for prop in tool_
     arg_name="context",
     type="mcpToolTrigger",
     toolName="heartbeat_mcp",
-    description="Provides a Heartbeat message/ping verification that the MCP Service is up and running.",
+    description="Provides a Heartbeat message/ping verification that the MCP Service supporting User Snippet and work effort tracking is up and running.",
     toolProperties="[]",
 )
 def heartbeat_mcp(context) -> str:
@@ -57,7 +57,7 @@ def heartbeat_mcp(context) -> str:
         str: A greeting message.
     """
 
-    heartbeatMsg = 'At {0}: Heartbeat MCP Service Is Up And Running I am MCPTool!'.format(datetime.date.today())
+    heartbeatMsg = 'At {0}: Heartbeat MCP Service Is Up And Running I am MCPTool!'.format(datetime.datetime.today())
     logging.info(heartbeatMsg)
     return heartbeatMsg
 
