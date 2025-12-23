@@ -7,36 +7,48 @@ import azure.functions as func
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # Constants for the Azure Blob Storage container, file, and blob path
-_SNIPPET_NAME_PROPERTY_NAME = "snippetname"
-_SNIPPET_PROPERTY_NAME = "snippet"
-_BLOB_PATH = "snippets/{mcptoolargs." + _SNIPPET_NAME_PROPERTY_NAME + "}.json"
+_PROPERTY_SNIPPET_NAME = "snippetName"
+_PROPERTY_SNIPPET_CONTENT = "snippetContent"
+_PROPERTY_SNIPPET_TOPIC = "snippetTopic"
+_PROPERTY_SNIPPET_CLASSIFICATION = "snippetClassification"
+_PROPERTY_SNIPPET_DATE = "snippetDate"
+_BLOB_PATH = "snippets/{mcptoolargs." + _PROPERTY_SNIPPET_NAME + "}.json"
 
 
-class ToolProperty:
-    def __init__(self, property_name: str, property_type: str, description: str):
-        self.propertyName = property_name
-        self.propertyType = property_type
+# Defint the property structure to hold name, type, and description
+# Used for MCP protocol required structure of properties communicated to host using the agent.
+class PropertyTuple:
+    def __init__(self, name: str, type: str, description: str):
+        self.name = name
+        self.type = type
         self.description = description
-
+        
     def to_dict(self):
         return {
-            "propertyName": self.propertyName,
-            "propertyType": self.propertyType,
+            "propertyName": self.name,
+            "propertyType": self.type,
             "description": self.description,
         }
 
 
-# Define the tool properties using the ToolProperty class
-tool_properties_save_snippets_object = [
-    ToolProperty(_SNIPPET_NAME_PROPERTY_NAME, "string", "The name of the snippet."),
-    ToolProperty(_SNIPPET_PROPERTY_NAME, "string", "The content of the snippet."),
+# Instantiate the tool properties using the ToolProperty object definition
+tool_save_snippets_property_list = [
+    PropertyTuple(_PROPERTY_SNIPPET_NAME, "string", "The name of the snippet."),
+    PropertyTuple(_PROPERTY_SNIPPET_CONTENT, "string", "The content of the snippet."),
+    PropertyTuple(_PROPERTY_SNIPPET_TOPIC, "string", "The topic of the snippet."),
+    PropertyTuple(_PROPERTY_SNIPPET_CLASSIFICATION, "string", "The classification of the snippet."),
+    PropertyTuple(_PROPERTY_SNIPPET_DATE, "date", "The date of the snippet"),
 ]
 
-tool_properties_get_snippets_object = [ToolProperty(_SNIPPET_NAME_PROPERTY_NAME, "string", "The name of the snippet.")]
+tool_get_snippets_property_list = [PropertyTuple(_PROPERTY_SNIPPET_NAME, "string", "The name of the snippet.")]
 
 # Convert the tool properties to JSON
-tool_properties_save_snippets_json = json.dumps([prop.to_dict() for prop in tool_properties_save_snippets_object])
-tool_properties_get_snippets_json = json.dumps([prop.to_dict() for prop in tool_properties_get_snippets_object])
+tool_properties_save_snippets_json = json.dumps([prop.to_dict() for prop in tool_save_snippets_property_list])
+tool_properties_get_snippets_json = json.dumps([prop.to_dict() for prop in tool_get_snippets_property_list])
+
+# See Azure Function Annotation Documentation For Parameter/Decorator Specification:
+# For @mcp_tool_trigger:
+# https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-mcp-trigger?tabs=attribute&pivots=programming-language-python
 
 
 @app.generic_trigger(
@@ -90,14 +102,18 @@ def get_snippet(file: func.InputStream, context) -> str:
     arg_name="context",
     type="mcpToolTrigger",
     toolName="save_snippet",
-    description="Save a snippet with a name.",
+    description="Save a snippet of information for a give date, with a topic and with some string context. The use can optionally provide the classification of the snippet.",
     toolProperties=tool_properties_save_snippets_json,
 )
 @app.generic_output_binding(arg_name="file", type="blob", connection="AzureWebJobsStorage", path=_BLOB_PATH)
 def save_snippet(file: func.Out[str], context) -> str:
     content = json.loads(context)
-    snippet_name_from_args = content["arguments"][_SNIPPET_NAME_PROPERTY_NAME]
-    snippet_content_from_args = content["arguments"][_SNIPPET_PROPERTY_NAME]
+    snippet_name_from_args = content["arguments"][_PROPERTY_SNIPPET_NAME]
+    snippet_content_from_args = content["arguments"][_PROPERTY_SNIPPET_CONTENT]
+    # Unused At This Point - Future Enhancements For Re-Organziation Of The Snippets
+    snippet_topic_from_args = content["arguments"][_PROPERTY_SNIPPET_TOPIC]
+    snippet_classification_from_args = content["arguments"][_PROPERTY_SNIPPET_CLASSIFICATION]
+    snippet_date_from_args = content["arguments"][_PROPERTY_SNIPPET_DATE]
 
     if not snippet_name_from_args:
         return "No snippet name provided"
