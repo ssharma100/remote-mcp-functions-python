@@ -182,3 +182,4 @@ __azurite_db*__.json
 __pycache__/
 *.py[cod]
 *$py.class
+secrets.json

@@ -102,25 +102,28 @@ def get_snippet(file: func.InputStream, context) -> str:
     arg_name="context",
     type="mcpToolTrigger",
     toolName="save_snippet",
-    description="Save a snippet of information for a give date, with a topic and with some string context. The use can optionally provide the classification of the snippet.",
+    description="Save a snippet to store the users provided content (usually descriptions of actions and or activities) to be" +
+      " recorded for a give snippet name and with a topic. The use can optionally provide the classification for the snippet to" + 
+      " relay the snippet's importances or type.",
     toolProperties=tool_properties_save_snippets_json,
 )
 @app.generic_output_binding(arg_name="file", type="blob", connection="AzureWebJobsStorage", path=_BLOB_PATH)
 def save_snippet(file: func.Out[str], context) -> str:
-    content = json.loads(context)
-    snippet_name_from_args = content["arguments"][_PROPERTY_SNIPPET_NAME]
-    snippet_content_from_args = content["arguments"][_PROPERTY_SNIPPET_CONTENT]
+    mcp_message = json.loads(context)
+    snippet_name = mcp_message["arguments"][_PROPERTY_SNIPPET_NAME]
+    snippet_content = mcp_message["arguments"][_PROPERTY_SNIPPET_CONTENT]
     # Unused At This Point - Future Enhancements For Re-Organziation Of The Snippets
-    snippet_topic_from_args = content["arguments"][_PROPERTY_SNIPPET_TOPIC]
-    snippet_classification_from_args = content["arguments"][_PROPERTY_SNIPPET_CLASSIFICATION]
-    snippet_date_from_args = content["arguments"][_PROPERTY_SNIPPET_DATE]
+    snippet_topic_from_args = mcp_message["arguments"][_PROPERTY_SNIPPET_TOPIC]
+    snippet_classification_from_args = mcp_message["arguments"][_PROPERTY_SNIPPET_CLASSIFICATION]
+    snippet_date_from_args = mcp_message["arguments"][_PROPERTY_SNIPPET_DATE]
 
-    if not snippet_name_from_args:
+    if not snippet_name:
         return "No snippet name provided"
 
-    if not snippet_content_from_args:
+    if not snippet_content:
         return "No snippet content provided"
 
-    file.set(snippet_content_from_args)
-    logging.info(f"Saved snippet: {snippet_content_from_args}")
-    return f"Snippet '{snippet_content_from_args}' saved successfully"
+    # Create Formatted Json For Storage Document Structure
+    file.set(snippet_content)
+    logging.info(f"Saved snippet: {snippet_content}")
+    return f"Snippet '{snippet_content}' saved successfully"
