@@ -183,3 +183,6 @@ __pycache__/
 *.py[cod]
 *$py.class
 secrets.json
+
+# Visual Studio (Not Code) Local Build artifacts
+.vs/
