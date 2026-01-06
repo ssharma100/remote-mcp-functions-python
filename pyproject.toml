@@ -3,3 +3,6 @@ line-length = 120
 target-version = "py311"
 lint.select = ["E", "F", "I", "UP", "A"]
 lint.ignore = ["D203"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
