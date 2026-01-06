@@ -1,0 +1,1 @@
+from .WorkSnippets import WorkDetailSnippet

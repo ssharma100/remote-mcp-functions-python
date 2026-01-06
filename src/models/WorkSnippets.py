@@ -1,4 +1,4 @@
-class SnippetRecord:
+class WorkDetailSnippet:
     """Represent a snippet record with a format structure for uniform storage in the backing store.
       Will generate a Json file for reability."""
 
