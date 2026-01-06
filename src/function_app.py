@@ -15,7 +15,7 @@ _PROPERTY_SNIPPET_DATE = "snippetDate"
 _BLOB_PATH = "snippets/{mcptoolargs." + _PROPERTY_SNIPPET_NAME + "}.json"
 
 
-# Defint the property structure to hold name, type, and description
+# Defines the property structure to hold name, type, and description
 # Used for MCP protocol required structure of properties communicated to host using the agent.
 class PropertyTuple:
     def __init__(self, name: str, type: str, description: str):
@@ -33,7 +33,7 @@ class PropertyTuple:
 
 # Instantiate the tool properties using the ToolProperty object definition
 tool_save_snippets_property_list = [
-    PropertyTuple(_PROPERTY_SNIPPET_NAME, "string", "The name of the snippet."),
+    PropertyTuple(_PROPERTY_SNIPPET_USER, "string", "UserID or Owner associated with this snippet."),
     PropertyTuple(_PROPERTY_SNIPPET_CONTENT, "string", "The content of the snippet."),
     PropertyTuple(_PROPERTY_SNIPPET_TOPIC, "string", "The topic of the snippet."),
     PropertyTuple(_PROPERTY_SNIPPET_CLASSIFICATION, "string", "The classification of the snippet."),
