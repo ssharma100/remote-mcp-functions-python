@@ -1,18 +1,24 @@
+import os
 import json
 import logging
-import datetime
+import secrets
 
 import azure.functions as func
+from models.WorkSnippets import WorkDetailSnippet
+from datetime import datetime
+from azure.storage.blob import BlobServiceClient
 
 app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # Constants for the Azure Blob Storage container, file, and blob path
-_PROPERTY_SNIPPET_NAME = "snippetName"
+_PROPERTY_SNIPPET_WEEK = "snippetWeek"
+_PROPERTY_SNIPPET_NAME = "snippet_content"
 _PROPERTY_SNIPPET_CONTENT = "snippetContent"
 _PROPERTY_SNIPPET_TOPIC = "snippetTopic"
 _PROPERTY_SNIPPET_CLASSIFICATION = "snippetClassification"
 _PROPERTY_SNIPPET_DATE = "snippetDate"
-_BLOB_PATH = "snippets/{mcptoolargs." + _PROPERTY_SNIPPET_NAME + "}.json"
+_PROPERTY_SNIPPET_USER = "snippetUser"
+_BLOB_PATH = "snippets/{storedObject." + _PROPERTY_SNIPPET_NAME + "}.json"
 
 
 # Defines the property structure to hold name, type, and description
@@ -50,6 +56,15 @@ tool_properties_get_snippets_json = json.dumps([prop.to_dict() for prop in tool_
 # For @mcp_tool_trigger:
 # https://learn.microsoft.com/en-us/azure/azure-functions/functions-bindings-mcp-trigger?tabs=attribute&pivots=programming-language-python
 
+def snippet_stored_name() -> str:
+    """
+    Generate a standardized stored name for the snippet.
+    """
+
+    current_time = datetime.now()
+    random_snippet_id = secrets.randbelow(10000)
+    storage_name = f"snippet-{current_time:%Y%m%d%H%M%S}-{random_snippet_id}"
+    return storage_name
 
 @app.generic_trigger(
     arg_name="context",
@@ -69,7 +84,7 @@ def heartbeat_mcp(context) -> str:
         str: A greeting message.
     """
 
-    heartbeatMsg = 'At {0}: Heartbeat MCP Service Is Up And Running I am MCPTool!'.format(datetime.datetime.today())
+    heartbeatMsg = 'At {0}: Heartbeat MCP Service Is Up And Running I am MCPTool!'.format(datetime.today())
     logging.info(heartbeatMsg)
     return heartbeatMsg
 
@@ -107,23 +122,38 @@ def get_snippet(file: func.InputStream, context) -> str:
       " relay the snippet's importances or type.",
     toolProperties=tool_properties_save_snippets_json,
 )
-@app.generic_output_binding(arg_name="file", type="blob", connection="AzureWebJobsStorage", path=_BLOB_PATH)
-def save_snippet(file: func.Out[str], context) -> str:
+@app.generic_output_binding(arg_name="outputBlob", type="blob", connection="AzureWebJobsStorage", path=_BLOB_PATH)
+def save_snippet(outputBlob: func.Out[str], context) -> str:
     mcp_message = json.loads(context)
-    snippet_name = mcp_message["arguments"][_PROPERTY_SNIPPET_NAME]
+    snippet_name = snippet_stored_name()
     snippet_content = mcp_message["arguments"][_PROPERTY_SNIPPET_CONTENT]
     # Unused At This Point - Future Enhancements For Re-Organziation Of The Snippets
     snippet_topic_from_args = mcp_message["arguments"][_PROPERTY_SNIPPET_TOPIC]
     snippet_classification_from_args = mcp_message["arguments"][_PROPERTY_SNIPPET_CLASSIFICATION]
-    snippet_date_from_args = mcp_message["arguments"][_PROPERTY_SNIPPET_DATE]
+    snippet_user = mcp_message["arguments"][_PROPERTY_SNIPPET_USER] 
 
-    if not snippet_name:
-        return "No snippet name provided"
+    # Validate Required Fields
 
     if not snippet_content:
         return "No snippet content provided"
 
     # Create Formatted Json For Storage Document Structure
-    file.set(snippet_content)
-    logging.info(f"Saved snippet: {snippet_content}")
-    return f"Snippet '{snippet_content}' saved successfully"
+    storedObject = WorkDetailSnippet(name=snippet_name, 
+                                     content=snippet_content,
+                                     user=snippet_user,
+                                     topic=snippet_topic_from_args,
+                                     classification=snippet_classification_from_args)
+    
+    snippet_content = storedObject.marshal()
+    # 1. Calculate your dynamic path
+    dynamic_path = f"demo/{snippet_name}.json"
+    
+    # 2. Use the SDK to upload
+    connection_string = os.getenv("AzureWebJobsStorage")
+    service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = service_client.get_blob_client(container="snippets", blob=dynamic_path)
+
+    blob_client.upload_blob(snippet_content, overwrite=True)
+    logging.info(f"Saved snippet: {storedObject.summary()}")
+    return f"Snippet '{storedObject.summary()}' saved successfully"
+

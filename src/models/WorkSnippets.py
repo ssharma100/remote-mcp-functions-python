@@ -66,3 +66,14 @@ class WorkDetailSnippet:
         cls.date = work_detail_dict.get("snippetDate", "")
         cls.user = work_detail_dict.get("user", "Unknown")
         return cls
+
+    def summary(self):
+        """
+        Generate a summary string for logging or display.
+        """
+        return (f"WorkDetailSnippet(Name: {self.storedName}, "
+                f"Week: {self.week}, " 
+                f"Topic: {self.topic}, "
+                f"Classification: {self.classification}, "
+                f"Date: {self.date}, "
+                f"User: {self.user})")
