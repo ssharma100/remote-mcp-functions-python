@@ -12,7 +12,7 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # Constants for the Azure Blob Storage container, file, and blob path
 _PROPERTY_SNIPPET_WEEK = "snippetWeek"
-_PROPERTY_SNIPPET_NAME = "snippet_content"
+_PROPERTY_SNIPPET_NAME = "snippetName"
 _PROPERTY_SNIPPET_CONTENT = "snippetContent"
 _PROPERTY_SNIPPET_TOPIC = "snippetTopic"
 _PROPERTY_SNIPPET_CLASSIFICATION = "snippetClassification"
@@ -46,7 +46,11 @@ tool_save_snippets_property_list = [
     PropertyTuple(_PROPERTY_SNIPPET_DATE, "date", "The date of the snippet"),
 ]
 
-tool_get_snippets_property_list = [PropertyTuple(_PROPERTY_SNIPPET_NAME, "string", "The name of the snippet.")]
+tool_get_snippets_property_list = [
+    PropertyTuple(_PROPERTY_SNIPPET_NAME, "string", "Unique name of the snippet that " 
+                                                 + "was set when the snipped was originally saved"),
+    PropertyTuple(_PROPERTY_SNIPPET_USER, "string", "UserID or Owner associated with this snippet."),
+]
 
 # Convert the tool properties to JSON
 tool_properties_save_snippets_json = json.dumps([prop.to_dict() for prop in tool_save_snippets_property_list])
@@ -93,11 +97,10 @@ def heartbeat_mcp(context) -> str:
     arg_name="context",
     type="mcpToolTrigger",
     toolName="get_snippet",
-    description="Retrieve a snippet by name.",
+    description="Retrieves a single snippets by the snippet name.  The unique name of the snippet must be provided",
     toolProperties=tool_properties_get_snippets_json,
 )
-@app.generic_input_binding(arg_name="file", type="blob", connection="AzureWebJobsStorage", path=_BLOB_PATH)
-def get_snippet(file: func.InputStream, context) -> str:
+def get_snippet(context) -> str:
     """
     Retrieves a snippet by name from Azure Blob Storage.
 
@@ -108,9 +111,29 @@ def get_snippet(file: func.InputStream, context) -> str:
     Returns:
         str: The content of the snippet or an error message.
     """
-    snippet_content = file.read().decode("utf-8")
-    logging.info(f"Retrieved snippet: {snippet_content}")
-    return snippet_content
+    mcp_message = json.loads(context)
+    snippet_name = mcp_message["arguments"][_PROPERTY_SNIPPET_NAME]
+    snippet_user = mcp_message["arguments"][_PROPERTY_SNIPPET_USER] 
+    # Validate Required Fields
+    if not snippet_name:
+        return "No snippet name provided - required to retrieve snippet."
+
+    if not snippet_user:
+        return "No snippet user provided - required to retrieve snippet."
+
+    # 1. Calculate your dynamic path
+    dynamic_path = f"{snippet_user}/{snippet_name}.json"
+    
+    # 2. Use the SDK to upload
+    connection_string = os.getenv("AzureWebJobsStorage")
+    service_client = BlobServiceClient.from_connection_string(connection_string)
+    blob_client = service_client.get_blob_client(container="snippets", blob=dynamic_path)
+
+    downloader = blob_client.download_blob(max_concurrency=1, encoding='UTF-8')
+    blob_json = downloader.readall()
+
+    logging.info(f"Retrieved Snippet: {snippet_name}:\n{blob_json}")
+    return blob_json
 
 
 @app.generic_trigger(
@@ -122,8 +145,7 @@ def get_snippet(file: func.InputStream, context) -> str:
       " relay the snippet's importances or type.",
     toolProperties=tool_properties_save_snippets_json,
 )
-@app.generic_output_binding(arg_name="outputBlob", type="blob", connection="AzureWebJobsStorage", path=_BLOB_PATH)
-def save_snippet(outputBlob: func.Out[str], context) -> str:
+def save_snippet(context) -> str:
     mcp_message = json.loads(context)
     snippet_name = snippet_stored_name()
     snippet_content = mcp_message["arguments"][_PROPERTY_SNIPPET_CONTENT]
@@ -146,7 +168,7 @@ def save_snippet(outputBlob: func.Out[str], context) -> str:
     
     snippet_content = storedObject.marshal()
     # 1. Calculate your dynamic path
-    dynamic_path = f"demo/{snippet_name}.json"
+    dynamic_path = f"{snippet_user}/{snippet_name}.json"
     
     # 2. Use the SDK to upload
     connection_string = os.getenv("AzureWebJobsStorage")
