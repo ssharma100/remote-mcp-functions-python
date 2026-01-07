@@ -133,8 +133,19 @@ def get_snippet(context) -> str:
     blob_json = downloader.readall()
 
     logging.info(f"Retrieved Snippet: {snippet_name}:\n{blob_json}")
-    return blob_json
 
+    # Convert to object for text based return of content
+    retrieved_object = WorkDetailSnippet.from_json_string(blob_json)
+    formatted_response =  (f"WorkDetailSnippet Record: {retrieved_object.storedName}\n" + 
+                f"Week: {retrieved_object.week}\n" + 
+                f"Topic: {retrieved_object.topic}\n" +
+                f"Classification: {retrieved_object.classification}\n" +
+                f"Date: {retrieved_object.date}\n" +
+                f"User: {retrieved_object.user}\n" + 
+                f"Content: {retrieved_object.content}")
+    
+    logging.info(f"Formatted Snippet Response:\n{formatted_response}")
+    return formatted_response
 
 @app.generic_trigger(
     arg_name="context",

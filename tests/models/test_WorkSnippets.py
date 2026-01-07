@@ -29,4 +29,3 @@ def test_work_detail_snippet_unmarshal(capsys):
     assert object.user == work_detail.user, "User should be deserialized correctly and match original object value"
 
 
-

@@ -77,3 +77,14 @@ class WorkDetailSnippet:
                 f"Classification: {self.classification}, "
                 f"Date: {self.date}, "
                 f"User: {self.user})")
+    
+    def to_text(self):
+        """
+        Generate a test string for pretty print use.
+        """
+        return (f"WorkDetailSnippet Record: {self.storedName}\n" + 
+                f"Week: {self.week}\n" + 
+                f"Topic: {self.topic}\n" +
+                f"Classification: {self.classification}\n" +
+                f"Date: {self.date}\n" +
+                f"User: {self.user})\n")
