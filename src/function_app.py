@@ -129,13 +129,20 @@ def get_snippet(context) -> str:
     service_client = BlobServiceClient.from_connection_string(connection_string)
     blob_client = service_client.get_blob_client(container="snippets", blob=dynamic_path)
 
-    downloader = blob_client.download_blob(max_concurrency=1, encoding='UTF-8')
-    blob_json = downloader.readall()
+    try:
+        downloader = blob_client.download_blob(max_concurrency=1, encoding='UTF-8')
+        blob_json = downloader.readall()
+    except Exception as e:
+        logging.error(f"Unable To Find Snipped Named {dynamic_path}: {e}")
+        return f"No Such Snippet Named '{snippet_name}' Found For User '{snippet_user}'"
 
     logging.info(f"Retrieved Snippet: {snippet_name}:\n{blob_json}")
 
     # Convert to object for text based return of content
+    
     retrieved_object = WorkDetailSnippet.from_json_string(blob_json)
+    
+    
     formatted_response =  (f"WorkDetailSnippet Record: {retrieved_object.storedName}\n" + 
                 f"Week: {retrieved_object.week}\n" + 
                 f"Topic: {retrieved_object.topic}\n" +
