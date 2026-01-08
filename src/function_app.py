@@ -12,6 +12,7 @@ app = func.FunctionApp(http_auth_level=func.AuthLevel.FUNCTION)
 
 # Constants for the Azure Blob Storage container, file, and blob path
 _PROPERTY_SNIPPET_WEEK = "snippetWeek"
+_PROPERTY_SNIPPET_YEAR = "snippetYear"
 _PROPERTY_SNIPPET_NAME = "snippetName"
 _PROPERTY_SNIPPET_CONTENT = "snippetContent"
 _PROPERTY_SNIPPET_TOPIC = "snippetTopic"
@@ -20,6 +21,7 @@ _PROPERTY_SNIPPET_DATE = "snippetDate"
 _PROPERTY_SNIPPET_USER = "snippetUser"
 _BLOB_PATH = "snippets/{storedObject." + _PROPERTY_SNIPPET_NAME + "}.json"
 
+_RESPONSE_AS_JSON = True
 
 # Defines the property structure to hold name, type, and description
 # Used for MCP protocol required structure of properties communicated to host using the agent.
@@ -43,7 +45,7 @@ tool_save_snippets_property_list = [
     PropertyTuple(_PROPERTY_SNIPPET_CONTENT, "string", "The content of the snippet."),
     PropertyTuple(_PROPERTY_SNIPPET_TOPIC, "string", "The topic of the snippet."),
     PropertyTuple(_PROPERTY_SNIPPET_CLASSIFICATION, "string", "The classification of the snippet."),
-    PropertyTuple(_PROPERTY_SNIPPET_DATE, "date", "The date of the snippet"),
+    PropertyTuple(_PROPERTY_SNIPPET_DATE, "string", "The date of the snippet - formatted as YYYY-MM-DD"),
 ]
 
 tool_get_snippets_property_list = [
@@ -52,9 +54,16 @@ tool_get_snippets_property_list = [
     PropertyTuple(_PROPERTY_SNIPPET_USER, "string", "UserID or Owner associated with this snippet."),
 ]
 
+tool_get_snippents_week_property_list = [
+    PropertyTuple(_PROPERTY_SNIPPET_WEEK, "integer", "The week number (week of the year) for the snippet(s) to retrieve."),
+    PropertyTuple(_PROPERTY_SNIPPET_USER, "string", "UserID or Owner associated with this snippet."),
+    PropertyTuple(_PROPERTY_SNIPPET_YEAR, "integer", "Target year for the retreival.  If not provided will default to current year."),
+]
+
 # Convert the tool properties to JSON
 tool_properties_save_snippets_json = json.dumps([prop.to_dict() for prop in tool_save_snippets_property_list])
 tool_properties_get_snippets_json = json.dumps([prop.to_dict() for prop in tool_get_snippets_property_list])
+tool_properties_get_snippets_for_week_json = json.dumps([prop.to_dict() for prop in tool_get_snippents_week_property_list])
 
 # See Azure Function Annotation Documentation For Parameter/Decorator Specification:
 # For @mcp_tool_trigger:
@@ -67,7 +76,8 @@ def snippet_stored_name() -> str:
 
     current_time = datetime.now()
     random_snippet_id = secrets.randbelow(10000)
-    storage_name = f"snippet-{current_time:%Y%m%d%H%M%S}-{random_snippet_id}"
+    week_of_year = current_time.isocalendar()[1]  # Current week number[]
+    storage_name = f"snippet-{week_of_year}-{current_time:%Y%m%d%H%M%S}-{random_snippet_id}"
     return storage_name
 
 @app.generic_trigger(
@@ -92,6 +102,55 @@ def heartbeat_mcp(context) -> str:
     logging.info(heartbeatMsg)
     return heartbeatMsg
 
+@app.generic_trigger(
+    arg_name="context",
+    type="mcpToolTrigger",
+    toolName="get_snippet_for_week",
+    description="Retrieves the names of snippets given a week number.  The week number and user must be provided. " 
+    + "A list of the snippet names of will be provided, seperated by coomas.  The list of nnames can " 
+    + "be used to retrieve the actual Snippet",
+    toolProperties=tool_properties_get_snippets_for_week_json,
+    data_type="STRING",
+)
+def get_snippet_for_week(context) -> str:
+    """
+    Retrieves a snippet given a specific week from Azure Blob Storage.
+
+    Args:
+        context: The trigger context containing the input arguments.
+
+    Returns:
+        str: The content of the snippet or an error message.
+    """
+    mcp_message = json.loads(context)
+    snippet_week = mcp_message["arguments"][_PROPERTY_SNIPPET_WEEK]
+    snippet_user = mcp_message["arguments"][_PROPERTY_SNIPPET_USER]
+    snippet_year = mcp_message["arguments"].get(_PROPERTY_SNIPPET_YEAR, datetime.now().year)
+    # Validate Required Fields
+    if not snippet_week:
+        return "No snippet week provided - required to retrieve snippets."
+
+    if not snippet_user:
+        return "No snippet user provided - required to retrieve snippets."
+
+    
+    # Use the SDK to access the Azure Blob
+    connection_string = os.getenv("AzureWebJobsStorage")
+    service_client = BlobServiceClient.from_connection_string(connection_string)
+    
+    # Use Container Client To List Blobs For The Given User
+    container_client = service_client.get_container_client("snippets")
+    blobs = container_client.list_blobs(name_starts_with=f"{snippet_user}/snippet-{snippet_week}-{snippet_year}")
+    
+    snippets = ''
+    
+    for blob in blobs:
+        logging.info(f"Adding Blob For User '{snippet_user}' In Week '{snippet_week}': {blob.name}")
+        blob_name, _, _ = blob.name.partition('.json')
+        logging.info(f"Blob Name Without Extension: {blob_name}")
+        snippets += f"{blob_name},"
+    
+    return snippets
 
 @app.generic_trigger(
     arg_name="context",
@@ -105,7 +164,6 @@ def get_snippet(context) -> str:
     Retrieves a snippet by name from Azure Blob Storage.
 
     Args:
-        file (func.InputStream): The input binding to read the snippet from Azure Blob Storage.
         context: The trigger context containing the input arguments.
 
     Returns:
@@ -137,22 +195,23 @@ def get_snippet(context) -> str:
         return f"No Such Snippet Named '{snippet_name}' Found For User '{snippet_user}'"
 
     logging.info(f"Retrieved Snippet: {snippet_name}:\n{blob_json}")
-
-    # Convert to object for text based return of content
     
-    retrieved_object = WorkDetailSnippet.from_json_string(blob_json)
+    if (_RESPONSE_AS_JSON):
+        logging.info(f"Json Snippet Response:\n{blob_json}")
+        return blob_json
+    else:
+        # Conversion For A Formatted Response (Plain Text)
+        retrieved_object = WorkDetailSnippet.from_json_string(blob_json)
+        formatted_response =  (f"WorkDetailSnippet Record: {retrieved_object.storedName}\n" + 
+                    f"Week: {retrieved_object.week}\n" + 
+                    f"Topic: {retrieved_object.topic}\n" +
+                    f"Classification: {retrieved_object.classification}\n" +
+                    f"Date: {retrieved_object.date}\n" +
+                    f"User: {retrieved_object.user}\n" + 
+                    f"Content: {retrieved_object.content}")
     
-    
-    formatted_response =  (f"WorkDetailSnippet Record: {retrieved_object.storedName}\n" + 
-                f"Week: {retrieved_object.week}\n" + 
-                f"Topic: {retrieved_object.topic}\n" +
-                f"Classification: {retrieved_object.classification}\n" +
-                f"Date: {retrieved_object.date}\n" +
-                f"User: {retrieved_object.user}\n" + 
-                f"Content: {retrieved_object.content}")
-    
-    logging.info(f"Formatted Snippet Response:\n{formatted_response}")
-    return formatted_response
+        logging.info(f"Formatted Snippet Response:\n{formatted_response}")
+        return formatted_response
 
 @app.generic_trigger(
     arg_name="context",
